@@ -19,6 +19,7 @@ package org.springframework.cloud.contract.verifier.util.xml;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Stack;
 
 import javax.xml.namespace.NamespaceContext;
 
@@ -27,12 +28,19 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 
+/**
+ * Helper class containing namespaces of provided XML document.
+ *
+ * @author Łukasz Gębicki
+ */
 public class DOMNamespaceContext implements NamespaceContext {
 
-	private final Map<String, String> namespaceMap = new HashMap<>();
+	private static final NamespacesExtractor NAMESPACES_EXTRACTOR = new DfsNamespacesExtractor();
+
+	private final Map<String, String> namespaceMap;
 
 	public DOMNamespaceContext(Node contextNode) {
-		addNamespaces(contextNode);
+		namespaceMap = NAMESPACES_EXTRACTOR.extract(contextNode);
 	}
 
 	public String getNamespaceURI(String arg0) {
@@ -52,20 +60,53 @@ public class DOMNamespaceContext implements NamespaceContext {
 		return namespaceMap.keySet().iterator();
 	}
 
-	private void addNamespaces(Node element) {
-		if (element.getParentNode() != null) {
-			addNamespaces(element.getParentNode());
+}
+
+/**
+ * Interface defining API for namespaces extracting strategy.
+ *
+ * @author Łukasz Gębicki
+ */
+interface NamespacesExtractor {
+
+	Map<String, String> extract(Node n);
+
+}
+
+/**
+ * Namespaces extracting strategy based on DFS algorithm.
+ *
+ * @author Łukasz Gębicki
+ */
+class DfsNamespacesExtractor implements NamespacesExtractor {
+
+	@Override
+	public Map<String, String> extract(Node node) {
+		Node rootNode = node;
+		while (rootNode.getParentNode() != null) {
+			rootNode = rootNode.getParentNode();
 		}
-		if (element instanceof Element) {
-			Element el = (Element) element;
-			NamedNodeMap map = el.getAttributes();
-			for (int x = 0; x < map.getLength(); x++) {
-				Attr attr = (Attr) map.item(x);
-				if ("xmlns".equals(attr.getPrefix())) {
-					namespaceMap.put(attr.getLocalName(), attr.getValue());
+
+		Map<String, String> namespaceMap = new HashMap<>();
+		Stack<Node> stack = new Stack<>();
+		stack.add(rootNode);
+		while (!stack.isEmpty()) {
+			Node item = stack.pop();
+			for (int i = 0, len = item.getChildNodes().getLength(); i < len; i++) {
+				stack.add(item.getChildNodes().item(i));
+			}
+			if (item instanceof Element) {
+				Element el = (Element) item;
+				NamedNodeMap map = el.getAttributes();
+				for (int x = 0, mapLen = map.getLength(); x < mapLen; x++) {
+					Attr attr = (Attr) map.item(x);
+					if ("xmlns".equals(attr.getPrefix())) {
+						namespaceMap.put(attr.getLocalName(), attr.getValue());
+					}
 				}
 			}
 		}
+		return namespaceMap;
 	}
 
 }

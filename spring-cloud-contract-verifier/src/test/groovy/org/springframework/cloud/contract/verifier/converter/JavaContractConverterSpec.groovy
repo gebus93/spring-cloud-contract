@@ -63,6 +63,12 @@ class JavaContractConverterSpec extends Specification {
 	File contractBodyBytesFile = new File(contractBodyBytes.toURI())
 
 	@Shared
+	URL javaSoapXml = JavaContractConverterSpec.
+			getResource("/contractsToCompile/contract_soap_xml.java")
+	@Shared
+	File javaSoapXmlFile = new File(javaSoapXml.toURI())
+
+	@Shared
 	URL docs = JavaContractConverterSpec.
 			getResource("/contractsToCompile/contract_docs_examples.java")
 	@Shared
@@ -189,6 +195,16 @@ class JavaContractConverterSpec extends Specification {
 		when:
 			Collection<Contract> contracts = ContractVerifierDslConverter.
 					convertAsCollection(contractFile.parentFile, contractFile)
+
+		then:
+			contracts.size() == 1
+	}
+
+	@Issue("#1709")
+	def "should convert java with SOAP"() {
+		when:
+			Collection<Contract> contracts = ContractVerifierDslConverter.
+					convertAsCollection(javaSoapXmlFile.parentFile, javaSoapXmlFile)
 
 		then:
 			contracts.size() == 1

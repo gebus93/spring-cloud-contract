@@ -17,6 +17,7 @@
 package org.springframework.cloud.contract.verifier.builder
 
 import org.junit.Rule
+import spock.lang.Issue
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -294,6 +295,78 @@ class XmlMethodBodyBuilderSpec extends Specification {
 			test.contains('assertThat(valueFromXPath(parsedXml, "//*[local-name()=\'RsHeader\' and namespace-uri()=\'http://schemas.xmlsoap.org/soap/custom\']/*[local-name()=\'MsgSeqId\']/text()")).isEqualTo("1234")')
 			test.contains('assertThat(valueFromXPath(parsedXml, "/SOAP-ENV:Envelope/namespace::SOAP-ENV")).isEqualTo("http://schemas.xmlsoap.org/soap/envelope/")')
 			!test.contains('assertThat(valueFromXPath(parsedXml, "/SOAP-ENV:Envelope/SOAP-ENV:Header/*[local-name()=\'RsHeader\' and namespace-uri()=\'http://schemas.xmlsoap.org/soap/custom\']/@xmlns")).isEqualTo"')
+		and:
+			SyntaxChecker.tryToCompile(methodBuilderName, test)
+		where:
+			methodBuilderName | methodBuilder
+			"spock"           | {
+				properties.testFramework = TestFramework.SPOCK
+			}
+			"testng"          | {
+				properties.testFramework = TestFramework.TESTNG
+			}
+			"junit"           | {
+				properties.testMode = TestMode.MOCKMVC
+			}
+			"jaxrs-spock"     | {
+				properties.testFramework = TestFramework.SPOCK; properties.testMode = TestMode.JAXRSCLIENT
+			}
+			"jaxrs"           | {
+				properties.testFramework = TestFramework.JUNIT; properties.testMode = TestMode.JAXRSCLIENT
+			}
+			"webclient"       | {
+				properties.testMode = TestMode.WEBTESTCLIENT
+			}
+	}
+
+	@Unroll
+	@Issue("#1709")
+	def 'should generate correct verification from complex named SOAP xml with body matchers  [#methodBuilderName]'() {
+		given:
+			Contract contractDsl =
+					// tag::xmlgroovy[]
+					Contract.make {
+						request {
+							method GET()
+							urlPath '/get'
+							headers {
+								contentType(applicationXml())
+							}
+						}
+						response {
+							status(OK())
+							headers {
+								contentType(applicationXml())
+							}
+							body """
+							<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
+								<SOAP-ENV:Header/>
+								<SOAP-ENV:Body>
+									<ns3:ReceiveResponse xmlns:ns3="http://com.example.webservice.receiver/webservice">
+										<result>1</result>
+										<text>Message</text>
+										<someUuid>5abcf89e-2648-4be1-bd4c-0981c8512784</someUuid>
+									</ns3:ReceiveResponse>
+								</SOAP-ENV:Body>
+							</SOAP-ENV:Envelope>
+							"""
+							bodyMatchers {
+								xPath("/SOAP-ENV:Envelope/SOAP-ENV:Body/ns3:ReceiveResponse/result/text()", byRegex(number()));
+								xPath("/SOAP-ENV:Envelope/SOAP-ENV:Body/ns3:ReceiveResponse/text/text()", byRegex(onlyAlphaUnicode()));
+								xPath("/SOAP-ENV:Envelope/SOAP-ENV:Body/ns3:ReceiveResponse/someUuid/text()", byRegex(uuid()));
+							}
+						}
+					}
+			// end::xmlgroovy[]
+			methodBuilder()
+		when:
+			String test = singleTestGenerator(contractDsl)
+		then:
+			test.contains($/assertThat(valueFromXPath(parsedXml, "/SOAP-ENV:Envelope/SOAP-ENV:Body/ns3:ReceiveResponse/result/text()")).matches("-?(\\d*\\.\\d+|\\d+)")/$)
+			test.contains($/assertThat(valueFromXPath(parsedXml, "/SOAP-ENV:Envelope/SOAP-ENV:Body/ns3:ReceiveResponse/text/text()")).matches("[\\p{L}]*")/$)
+			test.contains($/assertThat(valueFromXPath(parsedXml, "/SOAP-ENV:Envelope/SOAP-ENV:Body/ns3:ReceiveResponse/someUuid/text()")).matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")/$)
+			test.contains($/assertThat(valueFromXPath(parsedXml, "/SOAP-ENV:Envelope/namespace::SOAP-ENV")).isEqualTo("http://schemas.xmlsoap.org/soap/envelope/")/$)
+			test.contains($/assertThat(valueFromXPath(parsedXml, "/SOAP-ENV:Envelope/SOAP-ENV:Body/ns3:ReceiveResponse/namespace::ns3")).isEqualTo("http://com.example.webservice.receiver/webservice")/$)
 		and:
 			SyntaxChecker.tryToCompile(methodBuilderName, test)
 		where:
