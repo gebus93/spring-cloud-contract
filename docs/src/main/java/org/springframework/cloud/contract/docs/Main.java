@@ -18,8 +18,11 @@ package org.springframework.cloud.contract.docs;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -93,8 +96,8 @@ public class Main {
 		mapper.disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER);
 		StringBuilder sb = new StringBuilder();
 		for (Class metadatum : metadata) {
-			SpringCloudContractMetadata newInstance = (SpringCloudContractMetadata) metadatum
-					.getDeclaredConstructors()[0].newInstance();
+			SpringCloudContractMetadata newInstance = (SpringCloudContractMetadata) findNoArgsConstructor(
+					metadatum.getDeclaredConstructors()).newInstance();
 			String description = newInstance.description();
 			String key = newInstance.key();
 			List<Class> additionalClasses = classesToLookAt(metadatum, newInstance);
@@ -116,6 +119,11 @@ public class Main {
 			// @formatter:on
 		}
 		return sb;
+	}
+
+	private Constructor findNoArgsConstructor(Constructor[] declaredConstructors) {
+		return Arrays.stream(declaredConstructors).min(Comparator.comparingInt(Constructor::getParameterCount))
+				.orElse(null);
 	}
 
 	private List<Class> classesToLookAt(Class metadatum, SpringCloudContractMetadata newInstance) {
